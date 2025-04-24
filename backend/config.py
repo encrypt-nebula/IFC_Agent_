@@ -16,7 +16,7 @@ CORS_HEADERS = ["*"]
 
 # AI Configuration
 GENAI_API_KEY = "AIzaSyBhncuqGTRzr3fRpWrzgyMLlcNym2rJhYE"  # Replace with your Gemini API key
-MODEL_NAME = "gemini-1.5-pro-latest"  # Use a supported model name
+MODEL_NAME = "gemini-2.5-flash-preview-04-17"  # Use a supported model name
 MAX_RETRIES = 3  # Maximum code correction attempts
 RETRY_DELAY = 5  # Delay in seconds between retries for quota issues
 

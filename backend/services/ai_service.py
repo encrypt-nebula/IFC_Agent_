@@ -40,28 +40,68 @@ class AIService:
 
         ifc_service = IFCService()
 
+        # Initialize error context for feedback loop
+        error_context = []
+        
         prompt = f"""
-        You are an IFC expert Python developer. Generate Python code to analyze an IFC file using ifcopenshell.
-        Follow these strict rules:
-        1. Use the pre-loaded 'ifc_file' variable (do not open the file again or modify it)
-        2. Only use ifcopenshell and standard libraries
-        3. Store final results in a variable named 'result'
-        4. Never modify the original IFC file
-        5. Handle errors with try/except blocks
-        6. Return plain text without markdown or code block delimiters
-        7. DO NOT use backticks (```)
-        8. DO NOT redefine the ifc_file variable
-        9. DO NOT use exec() or eval()
+        You are an expert in the Industry Foundation Classes (IFC) schema and a skilled Python developer using the ifcopenshell library. Generate clean, safe, and effective Python code to extract insights from an IFC model. You must follow the constraints below while leveraging deep IFC knowledge.
 
-        IFC Domain Knowledge:
-        - Use ifc_file.by_type("IfcWall") or IfcWallStandardCase to get walls (for plastering).
-        - Use ifcopenshell.util.element.get_psets(element) to access property sets.
-        - Look for surface area in psets using keys like "NetSideArea", "GrossSideArea", "Area", "Length" x "Height" (as fallback).
-        - Use ifc_file.by_type("IfcSpace") for rooms and IfcSlab for floors to calculate area.
-        - For spaces, check psets or element geometry for area properties like "NetFloorArea", "GrossFloorArea".
+        - You *must* only return the asked output , Not extra information. 
+        
+        GENERAL INSTRUCTIONS:
+        - The ifc_file variable is already initialized and loaded. *DO NOT reopen or redefine it*.
+        - *Never modify the IFC file.* This is read-only analysis.
+        - All output must be stored in a variable named result and be plain text (no markdown, no backticks, no code blocks).
+        - Use only ifcopenshell, ifcopenshell.util.element, and standard libraries. No external packages.
+        - Avoid exec() or eval() at all times.
 
+        IFC OBJECTS & TYPES:
+        - Walls → ifc_file.by_type("IfcWall") or "IfcWallStandardCase"
+        - Spaces (Rooms) → ifc_file.by_type("IfcSpace")
+        - Floors → ifc_file.by_type("IfcSlab")
+        - Windows → ifc_file.by_type("IfcWindow")
+        - Doors → ifc_file.by_type("IfcDoor")
+        - Quantities → typically in IfcElementQuantity or psets with keys like Area, Length, Height, Width
+
+        COMMON PROPERTY SET ACCESS:
+        Use:
+        python
+        import ifcopenshell.util.element as util
+        psets = util.get_psets(element)
+
+        DIMENSION HANDLING:
+        - If OverallWidth or OverallHeight is missing (None or not present), try extracting dimensions from the element's Name using regex.
+        - Use this utility inside try/except:
+        python
+        import re
+
+        def extract_dimensions_from_name(name):
+            try:
+                match = re.search(r'(\d+)\s*[xX×]\s*(\d+)', name)
+                if match:
+                    return match.group(1), match.group(2)
+            except: pass
+
+        IFC ELEMENT SUMMARY:
+        The model contains:
+        - walls (e.g., "Basic Wall:UNIT-B (CA) Brick Wall-260mm_40mm One Side Plastering")
+        - doors (e.g., "M_Door-Passage-Uneven-Flush:FL4 Unit-A Main Door 1640 x 2400mm")
+        - windows (e.g., "Window-1:1980 x 1385mm")
+        - storeys ("Level 0", "Level 1")
+        - slabs (e.g., "Floor:FL4 UNIT-A Utility FF 30mm")
+        - columns (e.g., "M_Concrete-Rectangular-Column:200 x 750mm")
+        - beams (e.g., "M_Concrete-Rectangular Beam:200 x 600mm")
+
+        
         Query: {query}
+
+        
         """
+
+        if error_context:
+            prompt += "\n\nPrevious errors to handle:\n"
+            for error in error_context:
+                prompt += f"- {error}\n"
 
         # Generate and execute code with retries
         for attempt in range(MAX_RETRIES + 1):
@@ -69,6 +109,7 @@ class AIService:
                 code = self.generate_code(prompt)
                 if code.startswith("Error"):
                     print(f"Attempt {attempt + 1}: {code}")
+                    error_context.append(f"Generation error: {code}")
                     time.sleep(RETRY_DELAY)
                     continue
 
@@ -79,21 +120,36 @@ class AIService:
                 result = execute_code(code, ifc_file)
 
                 if "Error" not in result and "Traceback" not in result:
-                    return result  # ✅ Success
+                    return result  # Success
                 else:
                     print(f"Attempt {attempt + 1}: Code execution failed.")
+                    error_msg = result.split('\n')[-1] if '\n' in result else result
+                    error_context.append(f"Execution error: {error_msg}")
+                    
                     if attempt < MAX_RETRIES:
-                        prompt += f"\n\nPrevious code had errors: {result}\nPlease fix these issues while adhering to the original constraints."
+                        # Enhanced error feedback for next attempt
+                        prompt += "\n\nPrevious attempt failed. Here's what to fix:\n"
+                        prompt += f"- Error: {error_msg}\n"
+                        prompt += "- Ensure ALL operations are wrapped in try/except blocks\n"
+                        prompt += "- Add fallback values for missing data\n"
+                        prompt += "- Validate all properties before access\n"
+                        prompt += "- Consider alternative ways to find the requested information\n"
                         time.sleep(RETRY_DELAY)
+                    elif attempt >= MAX_RETRIES:
+                        return f"After several attempts, I couldn't process this query successfully. Here are the errors encountered:\n" + \
+                               "\n".join([f"- {err}" for err in error_context]) + \
+                               "\n\nPlease try rephrasing your query or provide more specific details about what you're looking for."
 
             except Exception as e:
+                error_context.append(f"System error: {str(e)}")
                 print(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < MAX_RETRIES:
                     print(f"Retrying in {RETRY_DELAY} seconds...")
                     time.sleep(RETRY_DELAY)
                 else:
-                    raise AIError(f"Failed after {MAX_RETRIES} attempts. Final error: {e}")
+                    error_summary = "\n".join([f"- {err}" for err in error_context])
+                    raise AIError(f"Failed after {MAX_RETRIES} attempts. Error summary:\n{error_summary}")
 
 
 # Create a singleton instance
-ai_service = AIService() 
+ai_service = AIService()

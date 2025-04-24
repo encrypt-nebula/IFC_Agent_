@@ -50,27 +50,27 @@ def delete_file(file_path: str) -> bool:
         print(f"Error deleting file: {e}")
         return False
 
-def get_file_info(file_path: str) -> Optional[dict]:
-    """
-    Get information about a file
+# def get_file_info(file_path: str) -> Optional[dict]:
+#     """
+#     Get information about a file
     
-    Args:
-        file_path: The path to the file
+#     Args:
+#         file_path: The path to the file
         
-    Returns:
-        Dictionary with file information or None if the file doesn't exist
-    """
-    if not os.path.exists(file_path):
-        return None
+#     Returns:
+#         Dictionary with file information or None if the file doesn't exist
+#     """
+#     if not os.path.exists(file_path):
+#         return None
     
-    try:
-        file_size = os.path.getsize(file_path)
-        file_name = os.path.basename(file_path)
-        return {
-            "filename": file_name,
-            "file_path": file_path,
-            "file_size": file_size
-        }
-    except Exception as e:
-        print(f"Error getting file info: {e}")
-        return None 
+#     try:
+#         file_size = os.path.getsize(file_path)
+#         file_name = os.path.basename(file_path)
+#         return {
+#             "filename": file_name,
+#             "file_path": file_path,
+#             "file_size": file_size
+#         }
+#     except Exception as e:
+#         print(f"Error getting file info: {e}")
+#         return None 
